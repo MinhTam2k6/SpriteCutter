@@ -408,6 +408,83 @@ def crop_vertical_region(
 
 
 # ============================================================
+# GRID 2 x 4
+# ============================================================
+
+def crop_grid_2x4(img, padding=4):
+
+    rgba = img.convert("RGBA")
+
+    w, h = rgba.size
+
+    if w < 4 or h < 2:
+        return []
+
+    frame_width = w // 4
+    frame_height = h // 2
+
+    frames = []
+
+    # --------------------------------------------------------
+    # Hàng trên: frame 01 -> 04
+    # Hàng dưới: frame 05 -> 08
+    # --------------------------------------------------------
+
+    for row in range(2):
+
+        for col in range(4):
+
+            x1 = col * frame_width
+            y1 = row * frame_height
+
+            # Frame cuối cùng lấy đến mép thật
+            # để tránh mất pixel do chia nguyên.
+            if col == 3:
+                x2 = w
+            else:
+                x2 = (col + 1) * frame_width
+
+            if row == 1:
+                y2 = h
+            else:
+                y2 = (row + 1) * frame_height
+
+            # Padding nhỏ trong từng ô.
+            x1p = max(
+                0,
+                x1 - padding
+            )
+
+            y1p = max(
+                0,
+                y1 - padding
+            )
+
+            x2p = min(
+                w,
+                x2 + padding
+            )
+
+            y2p = min(
+                h,
+                y2 + padding
+            )
+
+            frame = rgba.crop(
+                (
+                    x1p,
+                    y1p,
+                    x2p,
+                    y2p
+                )
+            )
+
+            frames.append(frame)
+
+    return frames
+
+
+# ============================================================
 # KHOẢNG CÁCH MÀU
 # ============================================================
 
@@ -436,19 +513,53 @@ def get_background_colors(img):
 
     samples = []
 
-    step_x = max(1, w // 50)
-    step_y = max(1, h // 50)
+    step_x = max(
+        1,
+        w // 50
+    )
 
-    for x in range(0, w, step_x):
-        samples.append(px[x, 0])
-        samples.append(px[x, h - 1])
+    step_y = max(
+        1,
+        h // 50
+    )
 
-    for y in range(0, h, step_y):
-        samples.append(px[0, y])
-        samples.append(px[w - 1, y])
+    for x in range(
+        0,
+        w,
+        step_x
+    ):
+
+        samples.append(
+            px[x, 0]
+        )
+
+        samples.append(
+            px[x, h - 1]
+        )
+
+    for y in range(
+        0,
+        h,
+        step_y
+    ):
+
+        samples.append(
+            px[0, y]
+        )
+
+        samples.append(
+            px[w - 1, y]
+        )
 
     if not samples:
-        return [(255, 255, 255, 255)]
+        return [
+            (
+                255,
+                255,
+                255,
+                255
+            )
+        ]
 
     clusters = []
 
@@ -463,12 +574,19 @@ def get_background_colors(img):
                 cluster[0]
             ) <= BACKGROUND_TOLERANCE:
 
-                cluster.append(color)
+                cluster.append(
+                    color
+                )
+
                 found = True
+
                 break
 
         if not found:
-            clusters.append([color])
+
+            clusters.append(
+                [color]
+            )
 
     clusters.sort(
         key=len,
@@ -480,18 +598,24 @@ def get_background_colors(img):
     for cluster in clusters[:3]:
 
         avg_r = int(
-            sum(c[0] for c in cluster)
-            / len(cluster)
+            sum(
+                c[0]
+                for c in cluster
+            ) / len(cluster)
         )
 
         avg_g = int(
-            sum(c[1] for c in cluster)
-            / len(cluster)
+            sum(
+                c[1]
+                for c in cluster
+            ) / len(cluster)
         )
 
         avg_b = int(
-            sum(c[2] for c in cluster)
-            / len(cluster)
+            sum(
+                c[2]
+                for c in cluster
+            ) / len(cluster)
         )
 
         background_colors.append(
@@ -535,13 +659,23 @@ def remove_background(
 
     for x in range(w):
 
-        queue.append((x, 0))
-        queue.append((x, h - 1))
+        queue.append(
+            (x, 0)
+        )
+
+        queue.append(
+            (x, h - 1)
+        )
 
     for y in range(h):
 
-        queue.append((0, y))
-        queue.append((w - 1, y))
+        queue.append(
+            (0, y)
+        )
+
+        queue.append(
+            (w - 1, y)
+        )
 
     while queue:
 
@@ -588,13 +722,15 @@ def remove_background(
         for nx, ny in neighbors:
 
             if (
-                0 <= nx < w and
+                0 <= nx < w
+                and
                 0 <= ny < h
             ):
 
                 nindex = ny * w + nx
 
                 if not visited[nindex]:
+
                     queue.append(
                         (nx, ny)
                     )
@@ -656,16 +792,23 @@ def auto_crop_frames(
         )
 
         if crop is not None:
-            frames.append(crop)
+
+            frames.append(
+                crop
+            )
 
     return frames
 
 
 # ============================================================
-# ẢNH CHECKERBOARD CHO PREVIEW PNG TRONG SUỐT
+# CHECKERBOARD PREVIEW
 # ============================================================
 
-def make_checkerboard(width, height, cell=10):
+def make_checkerboard(
+    width,
+    height,
+    cell=10
+):
 
     image = Image.new(
         "RGB",
@@ -680,7 +823,8 @@ def make_checkerboard(width, height, cell=10):
         for x in range(width):
 
             if (
-                (x // cell) +
+                (x // cell)
+                +
                 (y // cell)
             ) % 2 == 0:
 
@@ -702,7 +846,7 @@ def make_checkerboard(width, height, cell=10):
 
 
 # ============================================================
-# GIAO DIỆN V4
+# SPRITE CUTTER V4
 # ============================================================
 
 class SpriteCutter:
@@ -712,36 +856,39 @@ class SpriteCutter:
         self.root = root
 
         self.root.title(
-            "Sprite Cutter v4 - AutoStrategyGame"
+            "Sprite Cutter v4.1 - AutoStrategyGame"
         )
 
         self.root.geometry(
-            "980x720"
+            "980x760"
         )
 
         self.root.minsize(
             900,
-            650
+            680
         )
 
         self.image_path = None
         self.original_image = None
+
         self.preview_frames = []
+
         self.preview_photo = []
+
         self.preview_index = 0
 
         self.build_ui()
 
 
     # ========================================================
-    # BUILD UI
+    # UI
     # ========================================================
 
     def build_ui(self):
 
         title = tk.Label(
             self.root,
-            text="SPRITE CUTTER v4",
+            text="SPRITE CUTTER v4.1",
             font=("Arial", 22, "bold")
         )
 
@@ -752,7 +899,7 @@ class SpriteCutter:
         subtitle = tk.Label(
             self.root,
             text=(
-                "AutoStrategyGame Asset Tool  •  "
+                "AutoStrategyGame Asset Tool • "
                 "Cắt nhân vật + Xóa nền + Preview"
             ),
             font=("Arial", 10)
@@ -763,7 +910,7 @@ class SpriteCutter:
         )
 
         # ----------------------------------------------------
-        # TOP
+        # CHỌN ẢNH
         # ----------------------------------------------------
 
         top = tk.Frame(
@@ -816,13 +963,49 @@ class SpriteCutter:
             pady=10
         )
 
-        # Frame count
+        # Kiểu cắt
+        tk.Label(
+            settings,
+            text="Kiểu cắt:"
+        ).grid(
+            row=0,
+            column=0,
+            padx=5,
+            pady=5
+        )
+
+        self.cut_mode = ttk.Combobox(
+            settings,
+            values=[
+                "Tự động",
+                "Lưới 2 x 4"
+            ],
+            state="readonly",
+            width=14
+        )
+
+        self.cut_mode.set(
+            "Tự động"
+        )
+
+        self.cut_mode.grid(
+            row=0,
+            column=1,
+            padx=5
+        )
+
+        self.cut_mode.bind(
+            "<<ComboboxSelected>>",
+            self.on_cut_mode_changed
+        )
+
+        # Số frame
         tk.Label(
             settings,
             text="Số frame:"
         ).grid(
             row=0,
-            column=0,
+            column=2,
             padx=5,
             pady=5
         )
@@ -858,7 +1041,7 @@ class SpriteCutter:
 
         self.frame_mode.grid(
             row=0,
-            column=1,
+            column=3,
             padx=5
         )
 
@@ -868,7 +1051,7 @@ class SpriteCutter:
             text="Padding:"
         ).grid(
             row=0,
-            column=2,
+            column=4,
             padx=5
         )
 
@@ -884,7 +1067,7 @@ class SpriteCutter:
 
         self.padding.grid(
             row=0,
-            column=3,
+            column=5,
             padx=5
         )
 
@@ -894,7 +1077,7 @@ class SpriteCutter:
             text="Gap:"
         ).grid(
             row=0,
-            column=4,
+            column=6,
             padx=5
         )
 
@@ -910,7 +1093,7 @@ class SpriteCutter:
 
         self.gap.grid(
             row=0,
-            column=5,
+            column=7,
             padx=5
         )
 
@@ -919,9 +1102,10 @@ class SpriteCutter:
             settings,
             text="Nhận diện nền:"
         ).grid(
-            row=0,
-            column=6,
-            padx=5
+            row=1,
+            column=0,
+            padx=5,
+            pady=5
         )
 
         self.bg_tolerance = tk.Entry(
@@ -935,13 +1119,38 @@ class SpriteCutter:
         )
 
         self.bg_tolerance.grid(
-            row=0,
-            column=7,
+            row=1,
+            column=1,
+            padx=5
+        )
+
+        tk.Label(
+            settings,
+            text=(
+                "Mặc định: 35"
+            )
+        ).grid(
+            row=1,
+            column=2,
+            padx=5
+        )
+
+        # Thông tin Grid
+        self.grid_info = tk.Label(
+            settings,
+            text="",
+            font=("Arial", 9)
+        )
+
+        self.grid_info.grid(
+            row=1,
+            column=3,
+            columnspan=5,
             padx=5
         )
 
         # ----------------------------------------------------
-        # OUTPUT DIRECTORY
+        # OUTPUT
         # ----------------------------------------------------
 
         output_frame = tk.Frame(
@@ -984,7 +1193,7 @@ class SpriteCutter:
         )
 
         # ----------------------------------------------------
-        # ACTION BUTTONS
+        # BUTTONS
         # ----------------------------------------------------
 
         actions = tk.Frame(
@@ -1033,7 +1242,7 @@ class SpriteCutter:
         )
 
         # ----------------------------------------------------
-        # PREVIEW AREA
+        # PREVIEW
         # ----------------------------------------------------
 
         preview_box = tk.LabelFrame(
@@ -1050,7 +1259,6 @@ class SpriteCutter:
             pady=(5, 15)
         )
 
-        # Original preview
         original_box = tk.LabelFrame(
             preview_box,
             text="Sprite Sheet"
@@ -1074,10 +1282,9 @@ class SpriteCutter:
             expand=True
         )
 
-        # Frame preview
         frames_box = tk.LabelFrame(
             preview_box,
-            text="Frames"
+            text="Frame"
         )
 
         frames_box.pack(
@@ -1099,7 +1306,7 @@ class SpriteCutter:
         )
 
         # ----------------------------------------------------
-        # NAVIGATION
+        # NAV
         # ----------------------------------------------------
 
         nav = tk.Frame(
@@ -1140,6 +1347,44 @@ class SpriteCutter:
             padx=5
         )
 
+        # Cập nhật thông tin ban đầu
+        self.on_cut_mode_changed()
+
+
+    # ========================================================
+    # KHI ĐỔI KIỂU CẮT
+    # ========================================================
+
+    def on_cut_mode_changed(self, event=None):
+
+        mode = self.cut_mode.get()
+
+        if mode == "Lưới 2 x 4":
+
+            self.grid_info.config(
+                text=(
+                    "Ảnh sẽ được chia thành "
+                    "2 hàng × 4 cột = 8 frame"
+                )
+            )
+
+            self.frame_mode.set(
+                "8"
+            )
+
+        else:
+
+            self.grid_info.config(
+                text=(
+                    "Dùng thuật toán tự động "
+                    "như các phiên bản trước"
+                )
+            )
+
+            self.frame_mode.set(
+                "Tự động"
+            )
+
 
     # ========================================================
     # CHỌN ẢNH
@@ -1170,6 +1415,7 @@ class SpriteCutter:
 
             self.image_path = path
             self.original_image = image
+
             self.preview_frames = []
             self.preview_photo = []
             self.preview_index = 0
@@ -1210,9 +1456,10 @@ class SpriteCutter:
             self.status.config(
                 text=(
                     f"Đã chọn ảnh: "
-                    f"{os.path.basename(path)}  |  "
+                    f"{os.path.basename(path)} | "
                     f"Kích thước: "
-                    f"{image.width} × {image.height}px"
+                    f"{image.width} × "
+                    f"{image.height}px"
                 )
             )
 
@@ -1225,7 +1472,7 @@ class SpriteCutter:
 
 
     # ========================================================
-    # CHỌN THƯ MỤC
+    # CHỌN OUTPUT
     # ========================================================
 
     def choose_output(self):
@@ -1233,13 +1480,19 @@ class SpriteCutter:
         initial = None
 
         if self.output_entry.get():
-            initial = self.output_entry.get()
+
+            initial = (
+                self.output_entry.get()
+            )
 
         folder = filedialog.askdirectory(
             title="Chọn thư mục xuất",
-            initialdir=initial
-            if initial and os.path.isdir(initial)
-            else None
+            initialdir=(
+                initial
+                if initial
+                and os.path.isdir(initial)
+                else None
+            )
         )
 
         if folder:
@@ -1256,7 +1509,7 @@ class SpriteCutter:
 
 
     # ========================================================
-    # LẤY SETTINGS
+    # SETTINGS
     # ========================================================
 
     def get_settings(self):
@@ -1304,6 +1557,7 @@ class SpriteCutter:
     def process_frames(self):
 
         if not self.original_image:
+
             raise ValueError(
                 "Hãy chọn sprite sheet trước."
             )
@@ -1315,19 +1569,48 @@ class SpriteCutter:
             requested_count
         ) = self.get_settings()
 
-        frames = auto_crop_frames(
-            self.original_image,
-            padding=padding,
-            gap_threshold=gap
-        )
+        cut_mode = self.cut_mode.get()
+
+        # ----------------------------------------------------
+        # GRID 2 x 4
+        # ----------------------------------------------------
+
+        if cut_mode == "Lưới 2 x 4":
+
+            frames = crop_grid_2x4(
+                self.original_image,
+                padding=padding
+            )
+
+            if len(frames) != 8:
+
+                raise ValueError(
+                    (
+                        "Không thể tạo đủ 8 frame "
+                        "từ lưới 2 × 4."
+                    )
+                )
+
+        # ----------------------------------------------------
+        # AUTO
+        # ----------------------------------------------------
+
+        else:
+
+            frames = auto_crop_frames(
+                self.original_image,
+                padding=padding,
+                gap_threshold=gap
+            )
 
         if not frames:
+
             raise ValueError(
-                "Không phát hiện được nhân vật."
+                "Không phát hiện được frame."
             )
 
         # ----------------------------------------------------
-        # Kiểm tra số frame
+        # KIỂM TRA SỐ FRAME
         # ----------------------------------------------------
 
         detected_count = len(frames)
@@ -1341,14 +1624,12 @@ class SpriteCutter:
                         f"Tool phát hiện "
                         f"{detected_count} frame, "
                         f"nhưng bạn yêu cầu "
-                        f"{requested_count} frame.\n\n"
-                        f"Hãy kiểm tra lại ảnh hoặc "
-                        f"điều chỉnh Gap."
+                        f"{requested_count} frame."
                     )
                 )
 
         # ----------------------------------------------------
-        # Xóa nền
+        # XÓA NỀN
         # ----------------------------------------------------
 
         transparent_frames = []
@@ -1382,11 +1663,13 @@ class SpriteCutter:
 
             self.show_frame_preview()
 
+            mode = self.cut_mode.get()
+
             self.status.config(
                 text=(
                     f"✓ Preview hoàn tất — "
-                    f"phát hiện {len(frames)} frame. "
-                    f"Chưa xuất file."
+                    f"phát hiện {len(frames)} frame "
+                    f"({mode}). Chưa xuất file."
                 )
             )
 
@@ -1419,7 +1702,9 @@ class SpriteCutter:
             self.original_canvas.winfo_height()
         )
 
-        image = self.original_image.copy()
+        image = (
+            self.original_image.copy()
+        )
 
         image.thumbnail(
             (
@@ -1483,13 +1768,11 @@ class SpriteCutter:
             self.preview_index
         ]
 
-        # Checkerboard
         checker = make_checkerboard(
             max(100, frame.width),
             max(100, frame.height)
         )
 
-        # Resize checkerboard theo frame
         checker = checker.resize(
             frame.size
         ).convert(
@@ -1533,8 +1816,9 @@ class SpriteCutter:
                 f"{self.preview_index + 1}"
                 f" / "
                 f"{len(self.preview_frames)}"
-                f"    "
-                f"{frame.width} × {frame.height}px"
+                f"   |   "
+                f"{frame.width} × "
+                f"{frame.height}px"
             )
         )
 
@@ -1551,6 +1835,7 @@ class SpriteCutter:
         self.preview_index -= 1
 
         if self.preview_index < 0:
+
             self.preview_index = (
                 len(self.preview_frames) - 1
             )
@@ -1572,6 +1857,7 @@ class SpriteCutter:
         if self.preview_index >= len(
             self.preview_frames
         ):
+
             self.preview_index = 0
 
         self.show_frame_preview()
@@ -1603,7 +1889,7 @@ class SpriteCutter:
             )
 
             # ------------------------------------------------
-            # Xác nhận nếu thư mục có frame cũ
+            # FRAME CŨ
             # ------------------------------------------------
 
             old_frames = []
@@ -1613,7 +1899,9 @@ class SpriteCutter:
             ):
 
                 if (
-                    filename.startswith("frame_")
+                    filename.startswith(
+                        "frame_"
+                    )
                     and
                     filename.lower().endswith(
                         ".png"
@@ -1688,10 +1976,10 @@ class SpriteCutter:
                 "Hoàn tất",
                 (
                     f"Đã xuất {len(frames)} frame.\n\n"
-                    f"✓ Cắt nhân vật\n"
-                    f"✓ Tách nhân vật sát nhau\n"
+                    f"✓ Cắt frame\n"
                     f"✓ Xóa nền\n"
-                    f"✓ PNG trong suốt\n\n"
+                    f"✓ PNG trong suốt\n"
+                    f"✓ Thứ tự frame được giữ nguyên\n\n"
                     f"Thư mục:\n"
                     f"{output_dir}"
                 )
