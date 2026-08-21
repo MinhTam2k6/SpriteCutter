@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image
+from tkinter import filedialog, messagebox, ttk
+from PIL import Image, ImageTk
 from collections import deque
 import os
 
@@ -10,15 +10,7 @@ import os
 # ============================================================
 
 WHITE_THRESHOLD = 245
-
-# Độ sai khác màu cho phép khi nhận diện nền.
-# Tăng lên nếu nền có gradient / hơi nhiễu.
 BACKGROUND_TOLERANCE = 35
-
-# Chỉ xóa vùng nền liên thông với mép ảnh.
-# Điều này giúp không xóa những vùng màu giống nền
-# nhưng nằm bên trong nhân vật.
-USE_FLOOD_FILL = True
 
 
 # ============================================================
@@ -71,25 +63,14 @@ def split_wide_run(col_has, x1, x2, min_width=20):
     if not values:
         return [(x1, x2)]
 
-    # Làm mượt projection
     smooth = []
 
     for i in range(len(values)):
-
         start = max(0, i - 2)
         end = min(len(values), i + 3)
 
         avg = sum(values[start:end]) / (end - start)
-
         smooth.append(avg)
-
-    middle = len(smooth) // 2
-
-    left_values = smooth[:middle]
-    right_values = smooth[middle:]
-
-    if not left_values or not right_values:
-        return [(x1, x2)]
 
     search_start = max(
         3,
@@ -145,24 +126,23 @@ def split_wide_run(col_has, x1, x2, min_width=20):
 
     valley = smooth[best_index]
 
+    left_start = max(
+        0,
+        best_index - int(len(smooth) * 0.35)
+    )
+
     left_peak = max(
-        smooth[
-            max(
-                0,
-                best_index - int(len(smooth) * 0.35)
-            ):best_index
-        ]
+        smooth[left_start:best_index]
+    ) if best_index > left_start else 0
+
+    right_end = min(
+        len(smooth),
+        best_index + int(len(smooth) * 0.35)
     )
 
     right_peak = max(
-        smooth[
-            best_index + 1:
-            min(
-                len(smooth),
-                best_index + int(len(smooth) * 0.35)
-            )
-        ]
-    )
+        smooth[best_index + 1:right_end]
+    ) if right_end > best_index + 1 else 0
 
     surrounding_peak = min(
         left_peak,
@@ -172,9 +152,7 @@ def split_wide_run(col_has, x1, x2, min_width=20):
     if surrounding_peak <= 0:
         return [(x1, x2)]
 
-    valley_ratio = (
-        valley / surrounding_peak
-    )
+    valley_ratio = valley / surrounding_peak
 
     if valley_ratio > 0.70:
         return [(x1, x2)]
@@ -236,7 +214,6 @@ def detect_horizontal_runs(
                 gap = 0
 
     if start is not None:
-
         runs.append(
             (start, last_nonzero)
         )
@@ -246,15 +223,12 @@ def detect_horizontal_runs(
     for a, b in runs:
 
         if not merged:
-
             merged.append([a, b])
 
         elif a - merged[-1][1] > gap_threshold:
-
             merged.append([a, b])
 
         else:
-
             merged[-1][1] = b
 
     merged = [
@@ -285,11 +259,9 @@ def split_runs_if_needed(
 
     sorted_widths = sorted(widths)
 
-    median_width = (
-        sorted_widths[
-            len(sorted_widths) // 2
-        ]
-    )
+    median_width = sorted_widths[
+        len(sorted_widths) // 2
+    ]
 
     result = []
 
@@ -318,7 +290,6 @@ def split_runs_if_needed(
             result.extend(split)
 
         else:
-
             result.append(
                 (x1, x2)
             )
@@ -343,21 +314,13 @@ def crop_vertical_region(
 
     row_counts = []
 
-    for y in range(
-        ignore_top,
-        h
-    ):
+    for y in range(ignore_top, h):
 
         count = 0
 
-        for x in range(
-            x1,
-            x2 + 1
-        ):
+        for x in range(x1, x2 + 1):
 
-            if is_foreground(
-                *px[x, y]
-            ):
+            if is_foreground(*px[x, y]):
                 count += 1
 
         row_counts.append(count)
@@ -368,15 +331,11 @@ def crop_vertical_region(
     ]
 
     regions = []
-
     s = None
 
-    for i, ok in enumerate(
-        occupied
-    ):
+    for i, ok in enumerate(occupied):
 
         if ok and s is None:
-
             s = i
 
         elif not ok and s is not None:
@@ -401,14 +360,12 @@ def crop_vertical_region(
 
     region = max(
         regions,
-        key=lambda r:
-        r[1] - r[0]
+        key=lambda r: r[1] - r[0]
     )
 
     y1 = ignore_top + region[0]
     y2 = ignore_top + region[1]
 
-    # Gộp phần nhỏ nằm sát phía dưới
     for r in regions:
 
         ry1 = ignore_top + r[0]
@@ -418,7 +375,6 @@ def crop_vertical_region(
             ry1 > y2 and
             ry1 - y2 <= 10
         ):
-
             y2 = ry2
 
     x1p = max(
@@ -452,7 +408,7 @@ def crop_vertical_region(
 
 
 # ============================================================
-# TÍNH KHOẢNG CÁCH MÀU
+# KHOẢNG CÁCH MÀU
 # ============================================================
 
 def color_distance(c1, c2):
@@ -480,65 +436,20 @@ def get_background_colors(img):
 
     samples = []
 
-    # Lấy mẫu ở bốn cạnh.
-    step_x = max(
-        1,
-        w // 50
-    )
+    step_x = max(1, w // 50)
+    step_y = max(1, h // 50)
 
-    step_y = max(
-        1,
-        h // 50
-    )
+    for x in range(0, w, step_x):
+        samples.append(px[x, 0])
+        samples.append(px[x, h - 1])
 
-    # Mép trên
-    for x in range(
-        0,
-        w,
-        step_x
-    ):
-
-        samples.append(
-            px[x, 0]
-        )
-
-    # Mép dưới
-    for x in range(
-        0,
-        w,
-        step_x
-    ):
-
-        samples.append(
-            px[x, h - 1]
-        )
-
-    # Mép trái
-    for y in range(
-        0,
-        h,
-        step_y
-    ):
-
-        samples.append(
-            px[0, y]
-        )
-
-    # Mép phải
-    for y in range(
-        0,
-        h,
-        step_y
-    ):
-
-        samples.append(
-            px[w - 1, y]
-        )
+    for y in range(0, h, step_y):
+        samples.append(px[0, y])
+        samples.append(px[w - 1, y])
 
     if not samples:
         return [(255, 255, 255, 255)]
 
-    # Chia các màu thành nhóm gần nhau.
     clusters = []
 
     for color in samples:
@@ -553,18 +464,12 @@ def get_background_colors(img):
             ) <= BACKGROUND_TOLERANCE:
 
                 cluster.append(color)
-
                 found = True
-
                 break
 
         if not found:
+            clusters.append([color])
 
-            clusters.append(
-                [color]
-            )
-
-    # Nhóm lớn nhất thường là màu nền.
     clusters.sort(
         key=len,
         reverse=True
@@ -575,24 +480,18 @@ def get_background_colors(img):
     for cluster in clusters[:3]:
 
         avg_r = int(
-            sum(
-                c[0]
-                for c in cluster
-            ) / len(cluster)
+            sum(c[0] for c in cluster)
+            / len(cluster)
         )
 
         avg_g = int(
-            sum(
-                c[1]
-                for c in cluster
-            ) / len(cluster)
+            sum(c[1] for c in cluster)
+            / len(cluster)
         )
 
         avg_b = int(
-            sum(
-                c[2]
-                for c in cluster
-            ) / len(cluster)
+            sum(c[2] for c in cluster)
+            / len(cluster)
         )
 
         background_colors.append(
@@ -608,7 +507,7 @@ def get_background_colors(img):
 
 
 # ============================================================
-# XÓA NỀN BẰNG FLOOD FILL
+# XÓA NỀN
 # ============================================================
 
 def remove_background(
@@ -619,11 +518,10 @@ def remove_background(
     rgba = img.convert("RGBA")
 
     w, h = rgba.size
-
     px = rgba.load()
 
-    background_colors = (
-        get_background_colors(rgba)
+    background_colors = get_background_colors(
+        rgba
     )
 
     if not background_colors:
@@ -635,33 +533,15 @@ def remove_background(
 
     queue = deque()
 
-    # --------------------------------------------------------
-    # Bắt đầu từ toàn bộ mép ảnh.
-    # --------------------------------------------------------
-
     for x in range(w):
 
-        queue.append(
-            (x, 0)
-        )
-
-        queue.append(
-            (x, h - 1)
-        )
+        queue.append((x, 0))
+        queue.append((x, h - 1))
 
     for y in range(h):
 
-        queue.append(
-            (0, y)
-        )
-
-        queue.append(
-            (w - 1, y)
-        )
-
-    # --------------------------------------------------------
-    # Flood fill
-    # --------------------------------------------------------
+        queue.append((0, y))
+        queue.append((w - 1, y))
 
     while queue:
 
@@ -676,8 +556,6 @@ def remove_background(
 
         current = px[x, y]
 
-        # Nếu pixel này không giống nền,
-        # không đi sâu vào vùng đó.
         is_background = False
 
         for bg in background_colors:
@@ -693,7 +571,6 @@ def remove_background(
         if not is_background:
             continue
 
-        # Xóa nền
         px[x, y] = (
             current[0],
             current[1],
@@ -701,7 +578,6 @@ def remove_background(
             0
         )
 
-        # Các pixel xung quanh
         neighbors = (
             (x - 1, y),
             (x + 1, y),
@@ -719,7 +595,6 @@ def remove_background(
                 nindex = ny * w + nx
 
                 if not visited[nindex]:
-
                     queue.append(
                         (nx, ny)
                     )
@@ -781,16 +656,53 @@ def auto_crop_frames(
         )
 
         if crop is not None:
-
-            frames.append(
-                crop
-            )
+            frames.append(crop)
 
     return frames
 
 
 # ============================================================
-# GIAO DIỆN
+# ẢNH CHECKERBOARD CHO PREVIEW PNG TRONG SUỐT
+# ============================================================
+
+def make_checkerboard(width, height, cell=10):
+
+    image = Image.new(
+        "RGB",
+        (width, height),
+        "white"
+    )
+
+    pixels = image.load()
+
+    for y in range(height):
+
+        for x in range(width):
+
+            if (
+                (x // cell) +
+                (y // cell)
+            ) % 2 == 0:
+
+                pixels[x, y] = (
+                    235,
+                    235,
+                    235
+                )
+
+            else:
+
+                pixels[x, y] = (
+                    255,
+                    255,
+                    255
+                )
+
+    return image
+
+
+# ============================================================
+# GIAO DIỆN V4
 # ============================================================
 
 class SpriteCutter:
@@ -800,78 +712,168 @@ class SpriteCutter:
         self.root = root
 
         self.root.title(
-            "Sprite Cutter v3 - AutoStrategyGame"
+            "Sprite Cutter v4 - AutoStrategyGame"
         )
 
         self.root.geometry(
-            "620x470"
+            "980x720"
         )
 
-        self.root.resizable(
-            False,
-            False
+        self.root.minsize(
+            900,
+            650
         )
 
         self.image_path = None
+        self.original_image = None
+        self.preview_frames = []
+        self.preview_photo = []
+        self.preview_index = 0
 
-        # ----------------------------------------------------
-        # TITLE
-        # ----------------------------------------------------
+        self.build_ui()
 
-        tk.Label(
-            root,
-            text="SPRITE CUTTER v3",
-            font=("Arial", 20, "bold")
-        ).pack(
-            pady=(18, 3)
+
+    # ========================================================
+    # BUILD UI
+    # ========================================================
+
+    def build_ui(self):
+
+        title = tk.Label(
+            self.root,
+            text="SPRITE CUTTER v4",
+            font=("Arial", 22, "bold")
         )
 
-        tk.Label(
-            root,
+        title.pack(
+            pady=(15, 2)
+        )
+
+        subtitle = tk.Label(
+            self.root,
             text=(
-                "Tự động cắt nhân vật + xóa nền "
-                "thành PNG trong suốt"
+                "AutoStrategyGame Asset Tool  •  "
+                "Cắt nhân vật + Xóa nền + Preview"
             ),
             font=("Arial", 10)
-        ).pack(
-            pady=(0, 18)
+        )
+
+        subtitle.pack(
+            pady=(0, 12)
         )
 
         # ----------------------------------------------------
-        # CHỌN ẢNH
+        # TOP
         # ----------------------------------------------------
 
+        top = tk.Frame(
+            self.root
+        )
+
+        top.pack(
+            fill="x",
+            padx=18
+        )
+
         tk.Button(
-            root,
-            text="1. Chọn Sprite Sheet",
-            width=36,
+            top,
+            text="1. CHỌN SPRITE SHEET",
+            width=28,
             height=2,
             command=self.choose_image
         ).pack(
-            pady=6
+            side="left",
+            padx=5
+        )
+
+        self.file_label = tk.Label(
+            top,
+            text="Chưa chọn ảnh",
+            anchor="w"
+        )
+
+        self.file_label.pack(
+            side="left",
+            padx=12,
+            fill="x",
+            expand=True
         )
 
         # ----------------------------------------------------
-        # OPTIONS
+        # SETTINGS
         # ----------------------------------------------------
 
-        options = tk.Frame(root)
-
-        options.pack(
-            pady=12
+        settings = tk.LabelFrame(
+            self.root,
+            text="Thiết lập",
+            padx=10,
+            pady=8
         )
 
+        settings.pack(
+            fill="x",
+            padx=18,
+            pady=10
+        )
+
+        # Frame count
         tk.Label(
-            options,
-            text="Khoảng đệm (px):"
+            settings,
+            text="Số frame:"
         ).grid(
             row=0,
             column=0,
+            padx=5,
+            pady=5
+        )
+
+        self.frame_mode = ttk.Combobox(
+            settings,
+            values=[
+                "Tự động",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16"
+            ],
+            state="readonly",
+            width=10
+        )
+
+        self.frame_mode.set(
+            "Tự động"
+        )
+
+        self.frame_mode.grid(
+            row=0,
+            column=1,
+            padx=5
+        )
+
+        # Padding
+        tk.Label(
+            settings,
+            text="Padding:"
+        ).grid(
+            row=0,
+            column=2,
             padx=5
         )
 
         self.padding = tk.Entry(
-            options,
+            settings,
             width=7
         )
 
@@ -882,21 +884,22 @@ class SpriteCutter:
 
         self.padding.grid(
             row=0,
-            column=1,
+            column=3,
             padx=5
         )
 
+        # Gap
         tk.Label(
-            options,
-            text="Khoảng trắng tối đa (px):"
+            settings,
+            text="Gap:"
         ).grid(
             row=0,
-            column=2,
+            column=4,
             padx=5
         )
 
         self.gap = tk.Entry(
-            options,
+            settings,
             width=7
         )
 
@@ -907,66 +910,111 @@ class SpriteCutter:
 
         self.gap.grid(
             row=0,
-            column=3,
+            column=5,
             padx=5
         )
 
-        # ----------------------------------------------------
-        # BACKGROUND TOLERANCE
-        # ----------------------------------------------------
-
-        bg_options = tk.Frame(root)
-
-        bg_options.pack(
-            pady=4
-        )
-
+        # Background tolerance
         tk.Label(
-            bg_options,
-            text="Độ nhận diện nền:"
+            settings,
+            text="Nhận diện nền:"
         ).grid(
             row=0,
-            column=0,
+            column=6,
             padx=5
         )
 
         self.bg_tolerance = tk.Entry(
-            bg_options,
+            settings,
             width=7
         )
 
         self.bg_tolerance.insert(
             0,
-            str(BACKGROUND_TOLERANCE)
+            "35"
         )
 
         self.bg_tolerance.grid(
             row=0,
-            column=1,
+            column=7,
             padx=5
+        )
+
+        # ----------------------------------------------------
+        # OUTPUT DIRECTORY
+        # ----------------------------------------------------
+
+        output_frame = tk.Frame(
+            self.root
+        )
+
+        output_frame.pack(
+            fill="x",
+            padx=18,
+            pady=4
         )
 
         tk.Label(
-            bg_options,
-            text="(mặc định 35)"
-        ).grid(
-            row=0,
-            column=2,
+            output_frame,
+            text="Thư mục xuất:"
+        ).pack(
+            side="left",
+            padx=5
+        )
+
+        self.output_entry = tk.Entry(
+            output_frame
+        )
+
+        self.output_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=5
+        )
+
+        tk.Button(
+            output_frame,
+            text="Chọn",
+            width=10,
+            command=self.choose_output
+        ).pack(
+            side="left",
             padx=5
         )
 
         # ----------------------------------------------------
-        # BUTTON
+        # ACTION BUTTONS
         # ----------------------------------------------------
 
+        actions = tk.Frame(
+            self.root
+        )
+
+        actions.pack(
+            pady=10
+        )
+
         tk.Button(
-            root,
-            text="2. TỰ ĐỘNG CẮT + XÓA NỀN",
-            width=36,
+            actions,
+            text="2. XEM TRƯỚC",
+            width=24,
             height=2,
-            command=self.cut_auto
+            command=self.preview
         ).pack(
-            pady=15
+            side="left",
+            padx=8
+        )
+
+        tk.Button(
+            actions,
+            text="3. XUẤT TẤT CẢ",
+            width=24,
+            height=2,
+            command=self.export_frames
+        ).pack(
+            side="left",
+            padx=8
         )
 
         # ----------------------------------------------------
@@ -974,37 +1022,124 @@ class SpriteCutter:
         # ----------------------------------------------------
 
         self.status = tk.Label(
-            root,
-            text="Chưa chọn ảnh",
-            wraplength=560
+            self.root,
+            text="Sẵn sàng",
+            font=("Arial", 10),
+            wraplength=900
         )
 
         self.status.pack(
+            pady=5
+        )
+
+        # ----------------------------------------------------
+        # PREVIEW AREA
+        # ----------------------------------------------------
+
+        preview_box = tk.LabelFrame(
+            self.root,
+            text="Preview",
+            padx=8,
             pady=8
         )
 
-        tk.Label(
-            root,
-            text=(
-                "Nền trắng, xám, xanh, đỏ... đều có thể "
-                "được tự động xóa. Kết quả là PNG trong suốt."
-            ),
-            font=("Arial", 9),
-            wraplength=560
-        ).pack(
-            pady=8
+        preview_box.pack(
+            fill="both",
+            expand=True,
+            padx=18,
+            pady=(5, 15)
         )
 
-        tk.Label(
-            root,
-            text=(
-                "Nếu nền hơi nhiễu hoặc gradient, "
-                "tăng 'Độ nhận diện nền'."
-            ),
-            font=("Arial", 9)
-        ).pack(
-            pady=2
+        # Original preview
+        original_box = tk.LabelFrame(
+            preview_box,
+            text="Sprite Sheet"
         )
+
+        original_box.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=5
+        )
+
+        self.original_canvas = tk.Canvas(
+            original_box,
+            bg="#202020",
+            highlightthickness=0
+        )
+
+        self.original_canvas.pack(
+            fill="both",
+            expand=True
+        )
+
+        # Frame preview
+        frames_box = tk.LabelFrame(
+            preview_box,
+            text="Frames"
+        )
+
+        frames_box.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=5
+        )
+
+        self.frames_canvas = tk.Canvas(
+            frames_box,
+            bg="#202020",
+            highlightthickness=0
+        )
+
+        self.frames_canvas.pack(
+            fill="both",
+            expand=True
+        )
+
+        # ----------------------------------------------------
+        # NAVIGATION
+        # ----------------------------------------------------
+
+        nav = tk.Frame(
+            self.root
+        )
+
+        nav.pack(
+            pady=(0, 12)
+        )
+
+        tk.Button(
+            nav,
+            text="◀",
+            width=6,
+            command=self.previous_frame
+        ).pack(
+            side="left",
+            padx=5
+        )
+
+        self.frame_label = tk.Label(
+            nav,
+            text="Frame: -"
+        )
+
+        self.frame_label.pack(
+            side="left",
+            padx=15
+        )
+
+        tk.Button(
+            nav,
+            text="▶",
+            width=6,
+            command=self.next_frame
+        ).pack(
+            side="left",
+            padx=5
+        )
+
 
     # ========================================================
     # CHỌN ẢNH
@@ -1022,103 +1157,445 @@ class SpriteCutter:
             ]
         )
 
-        if path:
-
-            self.image_path = path
-
-            self.status.config(
-                text=(
-                    "Đã chọn: "
-                    + os.path.basename(path)
-                )
-            )
-
-    # ========================================================
-    # CẮT
-    # ========================================================
-
-    def cut_auto(self):
-
-        if not self.image_path:
-
-            messagebox.showwarning(
-                "Thiếu ảnh",
-                "Hãy chọn sprite sheet trước."
-            )
-
+        if not path:
             return
 
         try:
 
-            padding = max(
-                0,
-                int(
-                    self.padding.get()
-                )
-            )
-
-            gap = max(
-                1,
-                int(
-                    self.gap.get()
-                )
-            )
-
-            tolerance = max(
-                1,
-                int(
-                    self.bg_tolerance.get()
-                )
-            )
-
-            # ------------------------------------------------
-            # Đọc ảnh
-            # ------------------------------------------------
-
-            img = Image.open(
-                self.image_path
+            image = Image.open(
+                path
             ).convert(
                 "RGBA"
             )
 
-            # ------------------------------------------------
-            # Cắt frame
-            # ------------------------------------------------
+            self.image_path = path
+            self.original_image = image
+            self.preview_frames = []
+            self.preview_photo = []
+            self.preview_index = 0
 
-            frames = auto_crop_frames(
-                img,
-                padding=padding,
-                gap_threshold=gap
+            self.file_label.config(
+                text=os.path.basename(path)
             )
 
-            if not frames:
+            self.output_entry.delete(
+                0,
+                tk.END
+            )
 
-                messagebox.showerror(
-                    "Không tìm thấy frame",
+            base = os.path.splitext(
+                os.path.basename(path)
+            )[0]
+
+            default_output = os.path.join(
+                os.path.dirname(path),
+                base + "_auto_frames"
+            )
+
+            self.output_entry.insert(
+                0,
+                default_output
+            )
+
+            self.show_original_preview()
+
+            self.frames_canvas.delete(
+                "all"
+            )
+
+            self.frame_label.config(
+                text="Frame: -"
+            )
+
+            self.status.config(
+                text=(
+                    f"Đã chọn ảnh: "
+                    f"{os.path.basename(path)}  |  "
+                    f"Kích thước: "
+                    f"{image.width} × {image.height}px"
+                )
+            )
+
+        except Exception as e:
+
+            messagebox.showerror(
+                "Không thể mở ảnh",
+                str(e)
+            )
+
+
+    # ========================================================
+    # CHỌN THƯ MỤC
+    # ========================================================
+
+    def choose_output(self):
+
+        initial = None
+
+        if self.output_entry.get():
+            initial = self.output_entry.get()
+
+        folder = filedialog.askdirectory(
+            title="Chọn thư mục xuất",
+            initialdir=initial
+            if initial and os.path.isdir(initial)
+            else None
+        )
+
+        if folder:
+
+            self.output_entry.delete(
+                0,
+                tk.END
+            )
+
+            self.output_entry.insert(
+                0,
+                folder
+            )
+
+
+    # ========================================================
+    # LẤY SETTINGS
+    # ========================================================
+
+    def get_settings(self):
+
+        padding = max(
+            0,
+            int(
+                self.padding.get()
+            )
+        )
+
+        gap = max(
+            1,
+            int(
+                self.gap.get()
+            )
+        )
+
+        tolerance = max(
+            1,
+            int(
+                self.bg_tolerance.get()
+            )
+        )
+
+        mode = self.frame_mode.get()
+
+        if mode == "Tự động":
+            requested_count = None
+        else:
+            requested_count = int(mode)
+
+        return (
+            padding,
+            gap,
+            tolerance,
+            requested_count
+        )
+
+
+    # ========================================================
+    # XỬ LÝ FRAME
+    # ========================================================
+
+    def process_frames(self):
+
+        if not self.original_image:
+            raise ValueError(
+                "Hãy chọn sprite sheet trước."
+            )
+
+        (
+            padding,
+            gap,
+            tolerance,
+            requested_count
+        ) = self.get_settings()
+
+        frames = auto_crop_frames(
+            self.original_image,
+            padding=padding,
+            gap_threshold=gap
+        )
+
+        if not frames:
+            raise ValueError(
+                "Không phát hiện được nhân vật."
+            )
+
+        # ----------------------------------------------------
+        # Kiểm tra số frame
+        # ----------------------------------------------------
+
+        detected_count = len(frames)
+
+        if requested_count is not None:
+
+            if detected_count != requested_count:
+
+                raise ValueError(
                     (
-                        "Không phát hiện được nhân vật.\n\n"
-                        "Hãy kiểm tra sprite sheet."
+                        f"Tool phát hiện "
+                        f"{detected_count} frame, "
+                        f"nhưng bạn yêu cầu "
+                        f"{requested_count} frame.\n\n"
+                        f"Hãy kiểm tra lại ảnh hoặc "
+                        f"điều chỉnh Gap."
                     )
                 )
 
-                return
+        # ----------------------------------------------------
+        # Xóa nền
+        # ----------------------------------------------------
 
-            # ------------------------------------------------
-            # Output folder
-            # ------------------------------------------------
+        transparent_frames = []
 
-            base = os.path.splitext(
-                os.path.basename(
-                    self.image_path
-                )
-            )[0]
+        for frame in frames:
 
-            output_dir = os.path.join(
-                os.path.dirname(
-                    self.image_path
-                ),
-                base + "_auto_frames"
+            transparent = remove_background(
+                frame,
+                tolerance=tolerance
             )
+
+            transparent_frames.append(
+                transparent
+            )
+
+        return transparent_frames
+
+
+    # ========================================================
+    # PREVIEW
+    # ========================================================
+
+    def preview(self):
+
+        try:
+
+            frames = self.process_frames()
+
+            self.preview_frames = frames
+            self.preview_index = 0
+
+            self.show_frame_preview()
+
+            self.status.config(
+                text=(
+                    f"✓ Preview hoàn tất — "
+                    f"phát hiện {len(frames)} frame. "
+                    f"Chưa xuất file."
+                )
+            )
+
+        except Exception as e:
+
+            messagebox.showwarning(
+                "Không thể preview",
+                str(e)
+            )
+
+
+    # ========================================================
+    # PREVIEW SPRITE SHEET
+    # ========================================================
+
+    def show_original_preview(self):
+
+        if not self.original_image:
+            return
+
+        self.root.update_idletasks()
+
+        canvas_width = max(
+            300,
+            self.original_canvas.winfo_width()
+        )
+
+        canvas_height = max(
+            250,
+            self.original_canvas.winfo_height()
+        )
+
+        image = self.original_image.copy()
+
+        image.thumbnail(
+            (
+                canvas_width - 20,
+                canvas_height - 20
+            ),
+            Image.Resampling.LANCZOS
+        )
+
+        photo = ImageTk.PhotoImage(
+            image
+        )
+
+        self.original_photo = photo
+
+        self.original_canvas.delete(
+            "all"
+        )
+
+        self.original_canvas.create_image(
+            canvas_width // 2,
+            canvas_height // 2,
+            image=photo,
+            anchor="center"
+        )
+
+
+    # ========================================================
+    # PREVIEW FRAME
+    # ========================================================
+
+    def show_frame_preview(self):
+
+        self.frames_canvas.delete(
+            "all"
+        )
+
+        self.preview_photo = []
+
+        if not self.preview_frames:
+
+            self.frame_label.config(
+                text="Frame: -"
+            )
+
+            return
+
+        self.root.update_idletasks()
+
+        canvas_width = max(
+            300,
+            self.frames_canvas.winfo_width()
+        )
+
+        canvas_height = max(
+            250,
+            self.frames_canvas.winfo_height()
+        )
+
+        frame = self.preview_frames[
+            self.preview_index
+        ]
+
+        # Checkerboard
+        checker = make_checkerboard(
+            max(100, frame.width),
+            max(100, frame.height)
+        )
+
+        # Resize checkerboard theo frame
+        checker = checker.resize(
+            frame.size
+        ).convert(
+            "RGBA"
+        )
+
+        checker.alpha_composite(
+            frame
+        )
+
+        display = checker.convert(
+            "RGB"
+        )
+
+        display.thumbnail(
+            (
+                canvas_width - 30,
+                canvas_height - 30
+            ),
+            Image.Resampling.LANCZOS
+        )
+
+        photo = ImageTk.PhotoImage(
+            display
+        )
+
+        self.preview_photo.append(
+            photo
+        )
+
+        self.frames_canvas.create_image(
+            canvas_width // 2,
+            canvas_height // 2,
+            image=photo,
+            anchor="center"
+        )
+
+        self.frame_label.config(
+            text=(
+                f"Frame "
+                f"{self.preview_index + 1}"
+                f" / "
+                f"{len(self.preview_frames)}"
+                f"    "
+                f"{frame.width} × {frame.height}px"
+            )
+        )
+
+
+    # ========================================================
+    # FRAME TRƯỚC
+    # ========================================================
+
+    def previous_frame(self):
+
+        if not self.preview_frames:
+            return
+
+        self.preview_index -= 1
+
+        if self.preview_index < 0:
+            self.preview_index = (
+                len(self.preview_frames) - 1
+            )
+
+        self.show_frame_preview()
+
+
+    # ========================================================
+    # FRAME SAU
+    # ========================================================
+
+    def next_frame(self):
+
+        if not self.preview_frames:
+            return
+
+        self.preview_index += 1
+
+        if self.preview_index >= len(
+            self.preview_frames
+        ):
+            self.preview_index = 0
+
+        self.show_frame_preview()
+
+
+    # ========================================================
+    # EXPORT
+    # ========================================================
+
+    def export_frames(self):
+
+        try:
+
+            frames = self.process_frames()
+
+            output_dir = (
+                self.output_entry.get().strip()
+            )
+
+            if not output_dir:
+
+                raise ValueError(
+                    "Hãy chọn thư mục xuất."
+                )
 
             os.makedirs(
                 output_dir,
@@ -1126,8 +1603,10 @@ class SpriteCutter:
             )
 
             # ------------------------------------------------
-            # Xóa frame cũ
+            # Xác nhận nếu thư mục có frame cũ
             # ------------------------------------------------
+
+            old_frames = []
 
             for filename in os.listdir(
                 output_dir
@@ -1141,6 +1620,26 @@ class SpriteCutter:
                     )
                 ):
 
+                    old_frames.append(
+                        filename
+                    )
+
+            if old_frames:
+
+                answer = messagebox.askyesno(
+                    "Frame cũ",
+                    (
+                        f"Thư mục đang có "
+                        f"{len(old_frames)} frame PNG.\n\n"
+                        f"Xóa frame cũ và xuất lại?"
+                    )
+                )
+
+                if not answer:
+                    return
+
+                for filename in old_frames:
+
                     try:
 
                         os.remove(
@@ -1150,11 +1649,11 @@ class SpriteCutter:
                             )
                         )
 
-                    except:
+                    except Exception:
                         pass
 
             # ------------------------------------------------
-            # Xóa nền + lưu
+            # LƯU
             # ------------------------------------------------
 
             for i, frame in enumerate(
@@ -1162,41 +1661,36 @@ class SpriteCutter:
                 1
             ):
 
-                transparent_frame = (
-                    remove_background(
-                        frame,
-                        tolerance=tolerance
-                    )
-                )
-
                 output_path = os.path.join(
                     output_dir,
                     f"frame_{i:02d}.png"
                 )
 
-                transparent_frame.save(
+                frame.save(
                     output_path,
                     "PNG"
                 )
 
-            # ------------------------------------------------
-            # Status
-            # ------------------------------------------------
+            self.preview_frames = frames
+            self.preview_index = 0
+
+            self.show_frame_preview()
 
             self.status.config(
                 text=(
-                    f"Đã cắt {len(frames)} frame "
-                    f"+ xóa nền → "
-                    f"{output_dir}"
+                    f"✓ Đã xuất thành công "
+                    f"{len(frames)} frame PNG "
+                    f"trong suốt."
                 )
             )
 
             messagebox.showinfo(
                 "Hoàn tất",
                 (
-                    f"Đã xử lý {len(frames)} frame.\n\n"
-                    f"✓ Tự động cắt\n"
-                    f"✓ Tự động xóa nền\n"
+                    f"Đã xuất {len(frames)} frame.\n\n"
+                    f"✓ Cắt nhân vật\n"
+                    f"✓ Tách nhân vật sát nhau\n"
+                    f"✓ Xóa nền\n"
                     f"✓ PNG trong suốt\n\n"
                     f"Thư mục:\n"
                     f"{output_dir}"
@@ -1206,7 +1700,7 @@ class SpriteCutter:
         except Exception as e:
 
             messagebox.showerror(
-                "Lỗi",
+                "Không thể xuất",
                 str(e)
             )
 
@@ -1217,6 +1711,6 @@ class SpriteCutter:
 
 root = tk.Tk()
 
-SpriteCutter(root)
+app = SpriteCutter(root)
 
 root.mainloop()
